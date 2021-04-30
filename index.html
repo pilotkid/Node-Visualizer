@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script type="text/javascript" src="https://d3js.org/d3.v2.js"></script>
+    <style type="text/css">
+        .link {
+            stroke: #ccc;
+        }
+
+        .nodetext {
+            pointer-events: none;
+            font: 10px sans-serif;
+        }
+    </style>
+    <div id="openModal" class="modalDialog">
+        <div> <a href="#close" title="Close" class="close">X</a>
+
+            <h2 id="modalHeader">Modal Box</h2>
+
+            <div id="modalBody">
+
+            </div>
+        </div>
+    </div>
+</head>
+<a href="#openModal" id="openModal" style="display: none;">Open Modal</a>
+
+<body>
+    <input type="file" name="file" id="file">
+    <center>
+        <h3 id="details">
+            .
+        </h3>
+    </center>
+    <script type="text/javascript">
+
+        let w = window.innerWidth;
+        let h = window.innerHeight - 100;
+
+
+        var vis = d3.select("body").append("svg:svg")
+            .attr("width", w)
+            .attr("height", h);
+        let colors = d3.scale.category10();
+
+        function generate(dataset) {
+            var force = self.force = d3.layout.force()
+                .nodes(dataset.nodes)
+                .links(dataset.links)
+                .gravity(.05)
+                .distance(100)
+                .charge(-100)
+                .size([w, h])
+                .linkDistance(Math.floor(w / dataset.nodes.length) * 3)
+                .start();
+
+            var link = vis.selectAll("line.link")
+                .data(dataset.links)
+                .enter().append("svg:line")
+                .attr("class", "link")
+                .attr("id", function (d, t) { return `lbl${t}`; })
+                .attr("x1", function (d) { return d.source.x; })
+                .attr("y1", function (d) { return d.source.y; })
+                .attr("x2", function (d) { return d.target.x; })
+                .attr("y2", function (d) { return d.target.y; })
+                .style("stroke-width", 3)
+                .on("mouseover", (d, t) => {
+                    let x = document.getElementsByClassName("highlight");
+                    let i;
+                    for (i = 0; i < x.length; i++) {
+                        x[i].classList.toggle('highlight');
+                    }
+                    document.getElementById(`lbl${t}`).classList.toggle("highlight");
+                    document.getElementById("details").innerText = `${d.source.name} to ${d.target.name} | Weight = ${d.label}`;
+                });
+
+            var node_drag = d3.behavior.drag()
+                .on("dragstart", dragstart)
+                .on("drag", dragmove)
+                .on("dragend", dragend)
+            function dragstart(d, i) {
+                force.stop() // stops the force auto positioning before you start dragging
+            }
+
+            function dragmove(d, i) {
+                d.px += d3.event.dx;
+                d.py += d3.event.dy;
+                d.x += d3.event.dx;
+                d.y += d3.event.dy;
+                tick(); // this is the key to make it work together with updating both px,py,x,y on d !
+            }
+
+            function dragend(d, i) {
+                d.fixed = true; // of course set the node to fixed so the force doesn't include the node in its auto positioning stuff
+                tick();
+                force.resume();
+            }
+
+            let edgepaths = vis.selectAll(".edgepath")
+                .data(dataset.links)
+                .enter()
+                .append('path')
+                .attr({
+                    'd': function (d) { return 'M ' + d.source.x + ' ' + d.source.y + ' L ' + d.target.x + ' ' + d.target.y },
+                    'class': 'edgepath',
+                    'fill-opacity': 0,
+                    'stroke-opacity': 0,
+                    'fill': 'blue',
+                    'stroke': 'red',
+                    'id': function (d, i) { return 'edgepath' + i }
+                })
+                .style("pointer-events", "none")
+
+
+            var node = vis.selectAll("g.node")
+                .data(dataset.nodes)
+                .enter().append("svg:g")
+                .attr("class", "node")
+                .on("click", function (d) {
+                    if (window.location.hash) {
+                        var target = window.location.hash.replace('/', '');
+                    }
+                    window.location.hash = "#openModal"
+                    document.getElementById("modalHeader").innerText = `Details for node ${d.name}`;
+                    let html = "<table>";
+                    html += `<tr>
+                            <td>Source</td>
+                            <td>Destination</td>
+                            <td>Weight</td>
+                            </tr>`
+                    let r = dataset.links.filter(x => x.source.name == d.name || x.target.name == d.name);
+                    for (let index = 0; index < r.length; index++) {
+                        const element = r[index];
+
+                        html += `<tr>
+                                <td>${element.source.name}</td>
+                                <td>${element.target.name}</td>
+                                <td>${element.label}</td>
+                                </tr>`
+                    }
+                    html += "<table>"
+                    document.getElementById("modalBody").innerHTML = html;
+                })
+                .call(node_drag)
+
+            node.append("circle").attr({ "r": 15 })
+                .attr("class", "circle")
+                .attr("xlink:href", "https://github.com/favicon.ico")
+                .attr("x", "-8px")
+                .attr("y", "-8px")
+                .attr("width", "16px")
+                .style("fill", function (d, i) { return colors(i); })
+                .attr("height", "16px")
+
+
+            node.append("svg:text")
+                .attr("class", "nodetext")
+                .attr("dx", 0)
+                .attr("dy", 0)
+                .text(function (d) { return d.name })
+
+
+
+
+            force.on("tick", tick);
+
+            function tick() {
+                link.attr("x1", function (d) { return d.source.x; })
+                    .attr("y1", function (d) { return d.source.y; })
+                    .attr("x2", function (d) { return d.target.x; })
+                    .attr("y2", function (d) { return d.target.y; });
+
+                node.attr("transform", function (d) { return "translate(" + d.x + "," + d.y + ")"; });
+
+                edgelabels.attr('transform', function (d, i) {
+                    if (d.target.x < d.source.x) {
+                        bbox = this.getBBox();
+                        rx = bbox.x + bbox.width / 2;
+                        ry = bbox.y + bbox.height / 2;
+                        return 'rotate(180 ' + rx + ' ' + ry + ')';
+                    }
+                    else {
+                        return 'rotate(0)';
+                    }
+                });
+
+                edgepaths.attr('d', function (d) {
+                    let path = 'M ' + d.source.x + ' ' + d.source.y + ' L ' + d.target.x + ' ' + d.target.y;
+                    //console.log(d)
+                    return path
+                });
+            };
+
+            let edgelabels = vis.selectAll(".edgelabel")
+                .data(dataset.links)
+                .enter()
+                .append('text')
+                .style("pointer-events", "none")
+                .attr({
+                    'class': 'edgelabel',
+                    'id': function (d, i) { return 'edgelabel' + i },
+                    'dx': 80,
+                    'dy': 0,
+                    'font-size': 14,
+                    'fill': '#000'
+                });
+
+            edgelabels.append('textPath')
+                .attr('xlink:href', function (d, i) { return '#edgepath' + i })
+                .style("pointer-events", "none")
+                .text(function (d, i) { return `Weight: ${d.label}` });
+
+        }
+
+        document.getElementById('file').onchange = function () {
+            dataset = {
+                nodes: [],
+                links: []
+            };
+            let file = this.files[0];
+
+            let reader = new FileReader();
+            reader.onload = function (progressEvent) {
+                // Entire file
+                // console.log(this.result);
+
+                // By lines
+                let lines = this.result.split('\n');
+                for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+                    const line = lines[lineNum];
+                    if (lineNum == 0) {
+                        let pi = parseInt(line);
+                        for (let index = 0; index < pi; index++) {
+                            dataset.nodes.push({ name: `${index + 1}` });
+                        }
+                        continue;
+                    }
+
+                    let cols = line.split(' ');
+                    if (cols[0] == cols[1])
+                        continue;
+
+                    let s = parseInt(cols[0]) - 1;
+                    let t = parseInt(cols[1]) - 1;
+                    let w = parseInt(cols[2]);
+
+                    if (isNaN(s) || isNaN(t) || w > 1000)
+                        continue;
+
+                    let link = {
+                        source: s,
+                        target: t,
+                        label: w
+                    };
+
+                    //Check if array already has the link
+                    if (!dataset.links.some(x => (x.source == s && x.target == t) || (x.source == t && x.target == s))) {
+                        dataset.links.push(link);
+                    }
+                }
+                generate(dataset);
+            };
+            reader.readAsText(file);
+        };
+
+    </script>
+    <style>
+        .highlight {
+            stroke: red;
+            stroke-width: 2px
+        }
+
+        .modalDialog {
+            position: fixed;
+            font-family: Arial, Helvetica, sans-serif;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 99999;
+            opacity: 0;
+            -webkit-transition: opacity 400ms ease-in;
+            -moz-transition: opacity 400ms ease-in;
+            transition: opacity 400ms ease-in;
+            pointer-events: none;
+        }
+
+        .modalDialog:target {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modalDialog>div {
+            width: 400px;
+            position: relative;
+            margin: 10% auto;
+            padding: 5px 20px 13px 20px;
+            border-radius: 10px;
+            background: #fff;
+            background: -moz-linear-gradient(#fff, #999);
+            background: -webkit-linear-gradient(#fff, #999);
+            background: -o-linear-gradient(#fff, #999);
+        }
+
+        .close {
+            background: #606061;
+            color: #FFFFFF;
+            line-height: 25px;
+            position: absolute;
+            right: -12px;
+            text-align: center;
+            top: -10px;
+            width: 24px;
+            text-decoration: none;
+            font-weight: bold;
+            -webkit-border-radius: 12px;
+            -moz-border-radius: 12px;
+            border-radius: 12px;
+            -moz-box-shadow: 1px 1px 3px #000;
+            -webkit-box-shadow: 1px 1px 3px #000;
+            box-shadow: 1px 1px 3px #000;
+        }
+
+        .close:hover {
+            background: #00d9ff;
+        }
+    </style>
+
+</body>
+<span>
+        Created by Marcello Bachechi 2020 | No design effort was put into this script, do not judge :)
+    </span>
+</html>
