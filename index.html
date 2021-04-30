@@ -156,8 +156,9 @@
 
             node.append("svg:text")
                 .attr("class", "nodetext")
-                .attr("dx", 0)
-                .attr("dy", 0)
+                .style("font-size", "16pt")
+                .attr("dx", -14)
+                .attr("dy", 5)
                 .text(function (d) { return d.name })
 
 
